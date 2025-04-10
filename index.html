@@ -1,0 +1,233 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>Fire & Smoke Detection Dashboard</title>
+    <meta charset="UTF-8">  <meta name="viewport" content="width=device-width, initial-scale=1.0"> <style>
+        body {
+            font-family: sans-serif;
+            text-align: center;
+            margin: 0;
+            padding: 0;
+            background-color: #f7f7f7;
+            color: #333; /* Set default text color */
+        }
+
+        h1 {
+            color: #2c3e50;
+            margin-top: 20px;
+        }
+
+        p {
+            color: #7f8c8d;
+            margin-bottom: 20px;
+        }
+
+        .status-box {
+            background-color: #ffffff;
+            padding: 20px;
+            margin: 20px auto;
+            width: 90%;
+            max-width: 500px;
+            border-radius: 8px;
+            box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
+            border: 1px solid #ededed;
+        }
+
+        .status-box h2 {
+            color: #e74c3c;
+            margin-bottom: 15px;
+        }
+
+        .status-box p {
+            font-size: 18px;
+            /* No default color here, defined in JS based on status */
+        }
+
+        .status-box p span {
+            font-weight: bold;
+            color: #2c3e50; /* Strong font color */
+        }
+
+        /* Status colors defined as CSS classes */
+        .status-ok {
+            color: #27ae60; /* Green for OK status */
+        }
+
+        .status-alert {
+            color: #e74c3c; /* Red for alert status */
+        }
+
+        /* ซ่อนวิดีโอและกราฟ (เอาออกถ้าต้องการแสดง) */
+        video, .graph, canvas {
+            display: none;
+        }
+
+        button {
+            padding: 12px 24px;
+            margin-top: 20px;
+            background-color: #3498db;
+            color: white;
+            border: none;
+            cursor: pointer;
+            border-radius: 5px;
+            font-size: 16px;
+            transition: background-color 0.3s ease;
+            box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
+        }
+
+        button:hover {
+            background-color: #2980b9;
+        }
+
+        #alarm-sound {
+            display: none; /* Hide the audio element */
+        }
+
+        @media (min-width: 768px) {
+            .status-box {
+                width: 400px;
+            }
+        }
+    </style>
+</head>
+<body>
+    <h1>Fire & Smoke Detection Dashboard</h1>
+    <p>Connected</p>
+
+    <div class="status-box">
+        <h2>สถานะการตรวจจับ</h2>
+        <p>🔥 Fire: <span id="fire-status" class="status-ok">Loading...</span></p>
+        <p>💨 Smoke: <span id="smoke-status" class="status-ok">Loading...</span></p>
+        <p>⏱️ Timestamp: <span id="timestamp">Loading...</span></p>
+    </div>
+
+    <audio id="alarm-sound" src="alarm.mp3" preload="auto"></audio>
+
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/paho-mqtt/1.1.0/mqttws31.min.js"></script>
+
+    <script>
+        // อัปเดต timestamp ทุก 1 วิ
+        setInterval(() => {
+            document.getElementById("timestamp").textContent = new Date().toLocaleString();
+        }, 1000);
+
+        // MQTT
+        const client = new Paho.MQTT.Client("broker.emqx.io", 8083, "clientId-" + Math.random());
+
+        client.onConnectionLost = function (responseObject) {
+            console.log("Connection Lost: " + responseObject.errorMessage);
+        };
+
+        client.connect({
+            onSuccess: () => {
+                console.log("MQTT Connected");
+                client.subscribe("sensor/fire-status");
+            },
+            onFailure: (error) => {
+                console.error("MQTT Connection failed:", error);
+            }
+        });
+
+        client.onMessageArrived = function (message) {
+            try {
+                const topic = message.destinationName;
+                const payload = message.payloadString;
+                console.log("Message Recieved: " + topic + " = " + payload);
+                if (topic === "sensor/fire-status") {
+                    const fireStatusElement = document.getElementById("fire-status");
+                    fireStatusElement.textContent = payload;
+
+                    if (payload === "Fire Detected") {
+                        fireStatusElement.className = "status-alert"; // Apply red color
+                        playAlarm();
+                        logEvent("Fire Detected"); // Log the event
+                    } else {
+                        fireStatusElement.className = "status-ok";  // Apply green color
+                    }
+                }
+            } catch (error) {
+                console.error("Error handling MQTT message", error);
+            }
+        };
+
+        // เสียงเตือน
+        function playAlarm() {
+            const alarmSound = document.getElementById("alarm-sound");
+            if (alarmSound) {
+                alarmSound.play().catch(e => console.error("Error playing alarm:", e));
+            }
+        }
+
+        // ฟังก์ชันสำหรับส่งข้อมูลไปยัง MQTT Broker (ปรับปรุง)
+        function publishToMQTT(fireStatus, smokeStatus, timestamp) {
+            const topic = "KukKukKai/DetectionStatus";
+            const message = JSON.stringify({
+                fire: fireStatus,
+                smoke: smokeStatus,
+                timestamp: timestamp || new Date().toLocaleString() // Use provided timestamp or generate
+            });
+            client.publish(topic, message);
+            console.log("Sent MQTT message:", message, "to topic:", topic);
+        }
+
+
+
+        // จำลองการตรวจจับและส่งข้อมูลไปยัง MQTT (ปรับปรุง)
+        function simulateDetection() {
+            setInterval(() => {
+                // ในที่นี้เราจะจำลองการตรวจจับไฟแบบสุ่ม
+                const fireDetected = Math.random() < 0.2; // โอกาส 20% ที่จะตรวจพบไฟ
+                const smokeDetected = Math.random() < 0.3; //โอกาส 30% ที่จะตรวจพบควัน
+                const timestamp = new Date().toLocaleString();
+
+
+                const fireStatusElement = document.getElementById("fire-status");
+                const smokeStatusElement = document.getElementById("smoke-status");
+
+
+                fireStatusElement.textContent = fireDetected ? "🔥 Detected" : "No Fire Detected";
+                smokeStatusElement.textContent = smokeDetected ? "💨 Detected" : "No Smoke Detected";
+
+
+                fireStatusElement.className = fireDetected ? "status-alert" : "status-ok";
+                smokeStatusElement.className = smokeDetected ? "status-alert" : "status-ok";
+
+
+
+                if (fireDetected) {
+                    playAlarm();
+                    logEvent("Fire Detected");
+                }
+
+
+                if (client && client.connected) {
+                    publishToMQTT(fireDetected, smokeDetected, timestamp);
+                }
+
+
+            }, 5000); // ทำการตรวจจับและส่งข้อมูลทุก 5 วินาที
+        }
+
+
+
+        // เก็บ log
+        function logEvent(type) {
+            try {
+                const logs = JSON.parse(localStorage.getItem("fireLogs") || "[]");
+                logs.push({
+                    time: new Date().toLocaleString(),
+                    type: type,
+                });
+                localStorage.setItem("fireLogs", JSON.stringify(logs));
+            } catch (error) {
+                console.error("Error logging event", error);
+            }
+        }
+
+        // เริ่มการจำลองการตรวจจับเมื่อหน้าเว็บโหลด
+        window.onload = simulateDetection;
+    </script>
+</body>
+</html>
+
